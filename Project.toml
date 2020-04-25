@@ -1,0 +1,4 @@
+name = "Newick"
+uuid = "1ba866b9-3071-4b67-af4b-e225163fdd68"
+authors = ["Ciarán O'Mara <Ciaran.OMara@utas.edu.au>"]
+version = "0.1.0"
