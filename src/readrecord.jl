@@ -14,72 +14,50 @@ const machine = (function ()
     #     cat(opt('\r'), lf)
     # end
 
-    record = let
-        space = re"[\t ]+"
+    space = re"[\t ]+"
 
+    leaf = let
         name = re"\w+"
-        name = re"\w+"
+        name.actions[:enter] = [:mark]
+        name.actions[:exit] = [:leafname]
 
         distance = re"\w+"
+        distance.actions[:enter] = [:mark]
+        distance.actions[:exit] = [:leafdistance]
 
-        leaf = let
-            # optional name
-            # optional distance
-        end
-
-        nodeliststart = re"\("
-        position.actions[:enter] = [:nodeliststart]
-
-        nodelistfinish = let
-
-        end
-
-        leaffinish = re","
-        nodelistfinish = re"\)"
-
-        node = let
-            cat(
-                opt(nodeliststart),
-                opt(name),
-                opt(cat(re":", distance)),
-                alt(leaffinish, nodelistfinish)
-            )
-        end
-
-
-        alt(
-            re",",
-
-
-        )
-
-
-        nodelist = let
-
-
-
-        end
-
-        pfm = let
-            position = re"[0-9]*"
-            position.actions[:enter] = [:record_pfm_position]
-
-            frequency = re"[0-9]*"
-            frequency.actions[:enter] = [:mark]
-            frequency.actions[:exit] = [:record_pfm_frequency]
-
-            nucleotide = re"[ACGT]"
-            nucleotide.actions[:enter] = [:mark]
-            nucleotide.actions[:exit] = [:record_pfm_nucleotide]
-
-            rep1(cat(position, space, frequency, space, frequency, space, frequency, space, frequency, space, nucleotide, newline))
-        end
-
-        cat("DE", space, header, newline, pfm, "XX", newline)
+        cat(opt(name), opt(cat(re":", distance)))
     end
-    record.actions[:exit] = [:record]
+    leaf.actions[:exit] = [:leaf]
 
-    newick = rep(cat(record, rep(newline)))
+    leaffinish = re","
+    leaffinish.actions[:exit] = [:leaffinish]
+
+    nodeliststart = re"\("
+    nodeliststart.actions[:enter] = [:mark] # Note: marking to clear previous.
+    nodeliststart.actions[:exit] = [:nodeliststart]
+
+    nodelistfinish = let
+        nodelistname = re"\w+"
+        nodelistname.actions[:enter] = [:mark]
+        nodelistname.actions[:exit] = [:nodelistname]
+
+        nodelistdistance = re"\w+"
+        nodelistdistance.actions[:enter] = [:mark]
+        nodelistdistance.actions[:exit] = [:nodelistdistance]
+
+        cat(re")", opt(nodelistname), opt(cat(re":", nodelistdistance)))
+    end
+    nodelistfinish.actions[:exit] = [:nodelistfinish]
+
+    node = let
+        cat(
+            opt(nodeliststart),
+            leaf,
+            alt(leaffinish, nodelistfinish)
+        )
+    end
+
+    newick = cat(rep(node), re";")
 
     Automa.compile(newick)
 end)()
@@ -87,23 +65,30 @@ end)()
 
 const actions = Dict(
     :mark => :(@mark),
-    # :countline => :(linenum += 1),
+    :countline => :(linenum += 1),
 
-    :nodename => quote
+    :leafname => quote
         str = String(data[@markpos():p - 1])
         name!(record, str)
         @debug "name" str
     end,
 
-    :nodedistance => quote
+    :leaffinish => quote
+        @escape
+        @debug "leaffinish"
+    end,
+
+    :leafdistance => quote
         str = String(data[@markpos():p - 1])
         parsed = parse(Float64, str)
         distance!(record, parsed)
         @debug "distance" str parsed
     end,
 
-    :nodelist => quote
+    :nodeliststart => quote
         prenatal!(record)
+        treestate = :prenatal
+        @escape
         @debug "prenatal"
     end,
 
@@ -120,36 +105,27 @@ const actions = Dict(
         @debug "distance" str parsed
     end,
 
-    :node => quote
-            record.frequencies = reshape(frequencies, 4, :)
-            record.sequence = sequence
-            found = true
-            @escape
-    end,
-    :nodelist => quote
-            record.frequencies = reshape(frequencies, 4, :)
-            record.sequence = sequence
-            found = true
-            @escape
-        end
-    )
+    :nodelistfinish => quote
+        treestate = :lastchild
+        @debug "nodelistfinish"
+        @escape
+    end
+
 )
-
-
 
 initcode = quote
 
-    found = false
-
+    treestate = :leaf
 
     cs, linenum = state
 end
 
-loopcode = quote
-    found && @goto __return__
-end
+# loopcode = quote
+#     prenatal && @goto __return__
+#     lastchild && @goto __return__
+# end
 
-returncode = :(return cs, linenum, found)
+returncode = :(return cs, linenum, treestate)
 
 context = Automa.CodeGenContext(generator = :goto, checkbounds = false, loopunroll = 8)
 
