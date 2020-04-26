@@ -31,7 +31,7 @@ newicks = [
     parent = record
 
     record = Newick.Record(parent)
-    @test_logs (:debug, "leafname 16") (:debug, "leafdistance 20") (:debug, "leaffinish 20") min_level=Base.CoreLogging.Debug Newick.readrecord!(stream, record)
+    @test_logs (:debug, "leafname 3") (:debug, "leafdistance 7") (:debug, "leaffinish 7") min_level=Base.CoreLogging.Debug Newick.readrecord!(stream, record)
 
     push!(root.children, record)
 
