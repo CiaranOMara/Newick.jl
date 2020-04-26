@@ -1,4 +1,15 @@
-struct Reader{S <: TranscodingStream} <: BioGenerics.IO.AbstractReader
+mutable struct State{S <: TranscodingStream}
+    # Stream
+    stream::S
+    # Machine state
+    state::Int
+    # Line number
+    linenum::Int
+    # Is record filled?
+    filled::Bool
+end
+
+struct Reader{S <: TranscodingStream}
     state::State{S}
 end
 
@@ -10,13 +21,6 @@ function Reader(input::IO)
     return Reader(State(stream, 1, 1, false))
 end
 
-function Base.eltype(::Type{<:Reader}) #TODO: reader would not be iterable.
-    return Record
-end
-
-function BioGenerics.IO.stream(reader::Reader)
-    return reader.state.stream
-end
 
 
 function Record(data::Vector{UInt8})

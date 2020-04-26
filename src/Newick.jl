@@ -3,9 +3,7 @@ module Newick
 import Automa
 import Automa.RegExp: @re_str
 import Automa.Stream: @mark, @markpos, @relpos, @abspos
-import BioGenerics: BioGenerics, isfilled
-# import BioGenerics.Exceptions: missingerror
-import BioGenerics.Automa: State
+
 import TranscodingStreams: TranscodingStreams, TranscodingStream
 
 using AbstractTrees

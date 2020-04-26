@@ -14,7 +14,7 @@ function Record(parent::Record)
 end
 
 function prenatal!(record)
-    record.children = Vector{record}()
+    record.children = Vector{Record}()
 end
 
 function empty!(record::Record)

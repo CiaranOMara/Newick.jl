@@ -6,6 +6,11 @@ const machine = (function ()
     rep = Automa.RegExp.rep
     rep1 = Automa.RegExp.rep1
     opt = Automa.RegExp.opt
+    alt = Automa.RegExp.alt
+
+    name = re"[0-9A-Za-z_-]+?"
+
+    distance = cat(re"[0-9]+", opt(re"\.[0-9]*"))
 
     # newline = let
     #     lf = re"\n"
@@ -17,47 +22,47 @@ const machine = (function ()
     space = re"[\t ]+"
 
     leaf = let
-        name = re"\w+"
-        name.actions[:enter] = [:mark]
-        name.actions[:exit] = [:leafname]
+        leafname = name
+        leafname.actions[:enter] = [:mark]
+        leafname.actions[:exit] = [:leafname]
 
-        distance = re"\w+"
-        distance.actions[:enter] = [:mark]
-        distance.actions[:exit] = [:leafdistance]
+        leafdistance = distance
+        leafdistance.actions[:enter] = [:mark]
+        leafdistance.actions[:exit] = [:leafdistance]
 
-        cat(opt(name), opt(cat(re":", distance)))
+        cat(opt(leafname), opt(cat(re":", leafdistance)))
     end
-    leaf.actions[:exit] = [:leaf]
 
     leaffinish = re","
-    leaffinish.actions[:exit] = [:leaffinish]
+    leaffinish.actions[:enter] = [:leaffinish]
 
     nodeliststart = re"\("
-    nodeliststart.actions[:enter] = [:mark] # Note: marking to clear previous.
-    nodeliststart.actions[:exit] = [:nodeliststart]
+    nodeliststart.actions[:enter] = [:nodeliststart]
 
-    nodelistfinish = let
-        nodelistname = re"\w+"
-        nodelistname.actions[:enter] = [:mark]
-        nodelistname.actions[:exit] = [:nodelistname]
+    # nodelistfinish = let
+    #     nodelistname = name
+    #     nodelistname.actions[:enter] = [:mark]
+    #     nodelistname.actions[:exit] = [:nodelistname]
+    #
+    #     nodelistdistance = distance
+    #     nodelistdistance.actions[:enter] = [:mark]
+    #     nodelistdistance.actions[:exit] = [:nodelistdistance]
+    #
+    #     cat(re"\)", opt(nodelistname), opt(cat(re":", nodelistdistance)))
+    # end
+    # nodelistfinish.actions[:exit] = [:nodelistfinish]
 
-        nodelistdistance = re"\w+"
-        nodelistdistance.actions[:enter] = [:mark]
-        nodelistdistance.actions[:exit] = [:nodelistdistance]
+    # node = cat(
+    #         opt(nodeliststart),
+    #         leaf,
+    #         alt(leaffinish, nodelistfinish)
+    #     )
 
-        cat(re")", opt(nodelistname), opt(cat(re":", nodelistdistance)))
-    end
-    nodelistfinish.actions[:exit] = [:nodelistfinish]
+    # newick = cat(rep(node), re";")
 
-    node = let
-        cat(
-            opt(nodeliststart),
-            leaf,
-            alt(leaffinish, nodelistfinish)
-        )
-    end
-
-    newick = cat(rep(node), re";")
+    # newick = cat(nodeliststart, re".*?;")
+    # newick = cat(opt(nodeliststart), re".*?;")
+    newick = cat(opt(nodeliststart), leaf, leaffinish, re".*?;")
 
     Automa.compile(newick)
 end)()
@@ -65,49 +70,50 @@ end)()
 
 const actions = Dict(
     :mark => :(@mark),
-    :countline => :(linenum += 1),
+    # :countline => :(linenum += 1),
 
     :leafname => quote
+        @debug "leafname $p"
         str = String(data[@markpos():p - 1])
         name!(record, str)
-        @debug "name" str
-    end,
-
-    :leaffinish => quote
-        @escape
-        @debug "leaffinish"
     end,
 
     :leafdistance => quote
+        @debug "leafdistance $p"
         str = String(data[@markpos():p - 1])
         parsed = parse(Float64, str)
         distance!(record, parsed)
-        @debug "distance" str parsed
+    end,
+
+    :leaffinish => quote
+        @debug "leaffinish $p"
+        treestate = :leaf
+        @escape
     end,
 
     :nodeliststart => quote
+        @debug "nodeliststart $p"
         prenatal!(record)
         treestate = :prenatal
         @escape
-        @debug "prenatal"
     end,
 
     :nodelistname => quote
+        @debug "nodelistname $p"
         str = String(data[@markpos():p - 1])
         name!(record.parent, str)
-        @debug "name" str
     end,
 
     :nodelistdistance => quote
+        @debug "nodelistdistance $p"
         str = String(data[@markpos():p - 1])
         parsed = parse(Float64, str)
         distance!(record.parent, parsed)
-        @debug "distance" str parsed
     end,
 
     :nodelistfinish => quote
+        @debug "nodelistfinish $p"
         treestate = :lastchild
-        @debug "nodelistfinish"
         @escape
     end
 
@@ -115,24 +121,25 @@ const actions = Dict(
 
 initcode = quote
 
-    treestate = :leaf
+    treestate = :empty
 
-    cs, linenum = state
+    # cs, linenum = state
 end
 
-# loopcode = quote
-#     prenatal && @goto __return__
-#     lastchild && @goto __return__
-# end
+loopcode = quote
+    treestate != :empty && @goto __return__
+end
 
-returncode = :(return cs, linenum, treestate)
+# returncode = :(return cs, linenum, treestate)
+returncode = :(return cs, treestate)
 
 context = Automa.CodeGenContext(generator = :goto, checkbounds = false, loopunroll = 8)
 
 Automa.Stream.generate_reader(
     :readrecord!,
     machine,
-    arguments = (:(record::Record), :(state::Tuple{Int,Int})),
+    # arguments = (:(record::Record), :(state::Tuple{Int,Int})),
+    arguments = (:(record::Record),),
     actions = actions,
     context = context,
     initcode = initcode,
