@@ -27,12 +27,14 @@ end
 
 function prenatal!(record)
     record.children = Vector{Record}()
+    return record
 end
 
 function empty!(record::Record)
     record.name = missing
     record.distance = missing
     empty!(record.children)
+    record.children = missing
     return record
 end
 
@@ -160,7 +162,6 @@ context = Automa.CodeGenContext(generator = :goto, checkbounds = false, loopunro
 Automa.Stream.generate_reader(
     :read!,
     machine,
-    # arguments = (:(record::Record), :(state::Tuple{Int,Int})),
     arguments = (:(record::Record),),
     actions = actions,
     context = context,
